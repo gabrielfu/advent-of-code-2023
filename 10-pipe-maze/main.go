@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"math"
 	"os"
 	"strings"
@@ -16,39 +17,59 @@ func ReadLines(filename string) []string {
 }
 
 type Maze struct {
-	Maze       []string
-	Nr         int
-	Nc         int
-	Sr         int
-	Sc         int
-	LoopLength int
+	Maze []string
+	Nr   int
+	Nc   int
 }
 
 func NewMaze(lines []string) *Maze {
 	nr := len(lines)
 	nc := len(lines[0])
 
-	// Find 'S' in lines
-	sr := 0
-	sc := 0
-	for r := 0; r < nr; r++ {
-		for c := 0; c < nc; c++ {
-			if lines[r][c] == 'S' {
-				sr = r
-				sc = c
-				break
+	return &Maze{
+		Maze: lines,
+		Nr:   nr,
+		Nc:   nc,
+	}
+}
+
+func (m *Maze) FindStart() (int, int) {
+	for r, row := range m.Maze {
+		for c, col := range row {
+			if col == 'S' {
+				return r, c
 			}
 		}
 	}
+	return -1, -1
+}
 
-	return &Maze{
-		Maze:       lines,
-		Nr:         nr,
-		Nc:         nc,
-		Sr:         sr,
-		Sc:         sc,
-		LoopLength: 0,
+func (m *Maze) GetTile(r, c int) byte {
+	return m.Maze[r][c]
+}
+
+func IsConnected(direction Direction, tile byte) bool {
+	switch direction {
+	case Up:
+		return tile == '|' || tile == '7' || tile == 'F'
+	case Down:
+		return tile == '|' || tile == 'J' || tile == 'L'
+	case Right:
+		return tile == '-' || tile == 'J' || tile == '7'
+	case Left:
+		return tile == '-' || tile == 'F' || tile == 'L'
+	default:
+		return false
 	}
+}
+
+func (m *Maze) MoveIsValid(mi MoveInstruction, curPos Coord) bool {
+	newPos := curPos.Move(mi)
+	if newPos.r < 0 || newPos.r >= m.Nr || newPos.c < 0 || newPos.c >= m.Nc {
+		return false
+	}
+	newTile := m.GetTile(newPos.r, newPos.c)
+	return newTile == 'S' || IsConnected(mi.Direction, newTile)
 }
 
 type Direction int
@@ -78,102 +99,106 @@ func (d Direction) String() string {
 	}
 }
 
-func Dfs(maze *Maze, r, c int, direction Direction, steps int) {
-	// If we are at the end, return
-	if steps > 0 && r == maze.Sr && c == maze.Sc {
-		maze.LoopLength = steps
-		return
-	}
-
-	if maze.LoopLength > 0 {
-		return
-	}
-
-	if r < 0 || r >= maze.Nr || c < 0 || c >= maze.Nc {
-		return
-	}
-
-	// If no pipe, return
-	cur := maze.Maze[r][c]
-	if cur == '.' {
-		return
-	}
-
-	// validate direction is ok
-	switch direction {
+func (d Direction) Opposite() Direction {
+	switch d {
 	case Up:
-		if cur != '|' && cur != '7' && cur != 'F' {
-			return
-		}
+		return Down
 	case Down:
-		if cur != '|' && cur != 'J' && cur != 'L' {
-			return
-		}
+		return Up
 	case Right:
-		if cur != '-' && cur != 'J' && cur != '7' {
-			return
-		}
+		return Left
 	case Left:
-		if cur != '-' && cur != 'F' && cur != 'L' {
+		return Right
+	default:
+		return None
+	}
+}
+
+type Coord struct {
+	r int
+	c int
+}
+
+type MoveInstruction struct {
+	Delta     Coord
+	Direction Direction
+}
+
+var AllMoveInstructions = []MoveInstruction{
+	{Coord{-1, 0}, Up},
+	{Coord{1, 0}, Down},
+	{Coord{0, 1}, Right},
+	{Coord{0, -1}, Left},
+}
+
+func (c Coord) Move(m MoveInstruction) Coord {
+	return Coord{c.r + m.Delta.r, c.c + m.Delta.c}
+}
+
+type Game struct {
+	Maze    *Maze
+	Pos     Coord
+	Heading Direction
+	Steps   int
+}
+
+func NewGame(maze *Maze) *Game {
+	r, c := maze.FindStart()
+	return &Game{
+		Maze:    maze,
+		Pos:     Coord{r, c},
+		Heading: None,
+		Steps:   0,
+	}
+}
+
+func (g *Game) GetTile() byte {
+	return g.Maze.GetTile(g.Pos.r, g.Pos.c)
+}
+
+func (g *Game) Move() {
+	tile := g.GetTile()
+	// fmt.Println("=====================================")
+	fmt.Printf("pos=%c (%d, %d) ", tile, g.Pos.r, g.Pos.c)
+	// fmt.Println()
+
+	for _, mi := range AllMoveInstructions {
+		// fmt.Printf("Considering moving %s\n", mi.Direction)
+
+		if mi.Direction == g.Heading.Opposite() {
+			// fmt.Printf("Going in reverse, skipping %s\n", mi.Direction)
+			continue
+		}
+
+		if tile != 'S' && !IsConnected(mi.Direction.Opposite(), tile) {
+			// fmt.Printf("Not connected, skipping %s\n", mi.Direction)
+			continue
+		}
+
+		if g.Maze.MoveIsValid(mi, g.Pos) {
+			fmt.Printf("Moving %s\n", mi.Direction)
+			g.Pos = g.Pos.Move(mi)
+			g.Heading = mi.Direction
+			g.Steps++
 			return
 		}
-	default:
 	}
-
-	// traverse
-	switch cur {
-	case '|':
-		if direction == Up {
-			Dfs(maze, r-1, c, Up, steps+1)
-		} else if direction == Down {
-			Dfs(maze, r+1, c, Down, steps+1)
-		}
-	case '-':
-		if direction == Left {
-			Dfs(maze, r, c-1, Left, steps+1)
-		} else if direction == Right {
-			Dfs(maze, r, c+1, Right, steps+1)
-		}
-	case '7':
-		if direction == Up {
-			Dfs(maze, r, c-1, Left, steps+1)
-		} else if direction == Right {
-			Dfs(maze, r+1, c, Down, steps+1)
-		}
-	case 'F':
-		if direction == Up {
-			Dfs(maze, r, c+1, Right, steps+1)
-		} else if direction == Left {
-			Dfs(maze, r+1, c, Down, steps+1)
-		}
-	case 'J':
-		if direction == Down {
-			Dfs(maze, r, c-1, Left, steps+1)
-		} else if direction == Right {
-			Dfs(maze, r-1, c, Up, steps+1)
-		}
-	case 'L':
-		if direction == Down {
-			Dfs(maze, r, c+1, Right, steps+1)
-		} else if direction == Left {
-			Dfs(maze, r-1, c, Up, steps+1)
-		}
-	case 'S':
-		Dfs(maze, r-1, c, Up, steps+1)
-		Dfs(maze, r+1, c, Down, steps+1)
-		Dfs(maze, r, c+1, Right, steps+1)
-		Dfs(maze, r, c-1, Left, steps+1)
-	default:
-		return
-	}
+	panic("No valid move")
 }
 
 func part1() {
 	lines := ReadLines("input.txt")
 
 	maze := NewMaze(lines)
-	Dfs(maze, maze.Sr, maze.Sc, None, 0)
-	farthest := int(math.Ceil(float64(maze.LoopLength) / 2))
+	game := NewGame(maze)
+
+	for {
+		game.Move()
+		if game.GetTile() == 'S' {
+			break
+		}
+	}
+	farthest := int(math.Ceil(float64(game.Steps) / 2))
 	println(farthest)
 }
 

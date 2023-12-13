@@ -1,9 +1,8 @@
 package main
 
 import (
-	"fmt"
+	"math"
 	"os"
-	"slices"
 	"strings"
 )
 
@@ -48,10 +47,6 @@ func (u *Universe) Col(c int) string {
 	return col
 }
 
-func (u *Universe) IsGalaxy(coord Coord) bool {
-	return u.data[coord.r][coord.c] == '#'
-}
-
 func HasGalaxy(line string) bool {
 	return strings.Contains(line, "#")
 }
@@ -92,51 +87,33 @@ func (u *Universe) EmptyCols() []int {
 	return cols
 }
 
-var dr = []int{-1, 1, 0, 0}
-var dc = []int{0, 0, -1, 1}
-
-func Neighbors(u *Universe, coord Coord) []Coord {
-	var neighbors []Coord
-	for i := 0; i < 4; i++ {
-		r, c := dr[i], dc[i]
-		new := Coord{coord.r + r, coord.c + c}
-		if new.r < 0 || new.r >= u.Rows() || new.c < 0 || new.c >= u.Cols() {
-			continue
-		}
-		neighbors = append(neighbors, new)
-	}
-	return neighbors
-}
-
 type Path struct {
 	coord   Coord
 	steps   int
 	empties int // number of empty rows/cols we have passed
 }
 
-func BfsShortestPaths(u *Universe, start Coord, emptyRows, emptyCols []int) map[Coord]Path {
-	visited := make(map[Coord]bool)
-	queue := []Path{{start, 0, 0}}
-	result := make(map[Coord]Path)
-	for len(queue) > 0 {
-		path := queue[0]
-		queue = queue[1:]
-		visited[path.coord] = true
-		for _, neighbor := range Neighbors(u, path.coord) {
-			if visited[neighbor] {
-				continue
-			}
-			if u.IsGalaxy(neighbor) {
-				result[neighbor] = Path{neighbor, path.steps + 1, path.empties}
-			}
-			empties := path.empties
-			if slices.Contains(emptyRows, neighbor.r) || slices.Contains(emptyCols, neighbor.c) {
-				empties++
-			}
-			queue = append(queue, Path{neighbor, path.steps + 1, empties})
+func ShortestPaths(u *Universe, start Coord, end Coord, emptyRows, emptyCols []int) Path {
+	steps := int(math.Abs(float64(start.r-end.r))) + int(math.Abs(float64(start.c-end.c)))
+
+	// check how many intermediate empty rows/cols we have passed
+	empties := 0
+	maxR := max(start.r, end.r)
+	minR := min(start.r, end.r)
+	for _, r := range emptyRows {
+		if r > minR && r < maxR {
+			empties++
 		}
 	}
-	return result
+	maxC := max(start.c, end.c)
+	minC := min(start.c, end.c)
+	for _, c := range emptyCols {
+		if c > minC && c < maxC {
+			empties++
+		}
+	}
+
+	return Path{end, steps, empties}
 
 }
 
@@ -157,17 +134,11 @@ func main() {
 	emptyCols := u.EmptyCols()
 
 	galaxies := u.Galaxies()
-	paths := map[Coord]map[Coord]Path{}
-	for i, g := range galaxies {
-		paths[g] = BfsShortestPaths(u, g, emptyRows, emptyCols)
-		fmt.Printf("Completed %d/%d\n", i+1, len(galaxies))
-	}
-
 	pairs := GeneratePairs(galaxies)
 	part1 := 0
 	part2 := 0
 	for _, pair := range pairs {
-		path := paths[pair[0]][pair[1]]
+		path := ShortestPaths(u, pair[0], pair[1], emptyRows, emptyCols)
 		part1 += path.steps + path.empties*(2-1)
 		part2 += path.steps + path.empties*(1e6-1)
 	}

@@ -1,9 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"math"
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -46,6 +46,10 @@ func (m *Maze) FindStart() (int, int) {
 
 func (m *Maze) GetTile(r, c int) byte {
 	return m.Maze[r][c]
+}
+
+func (m *Maze) SetTile(r, c int, tile byte) {
+	m.Maze[r] = m.Maze[r][:c] + string(tile) + m.Maze[r][c+1:]
 }
 
 func IsConnected(direction Direction, tile byte) bool {
@@ -135,6 +139,24 @@ func (c Coord) Move(m MoveInstruction) Coord {
 	return Coord{c.r + m.Delta.r, c.c + m.Delta.c}
 }
 
+// To returns the move instruction to go from c to other
+func (c Coord) To(other Coord) MoveInstruction {
+	if other.r == c.r {
+		if other.c == c.c+1 {
+			return MoveInstruction{Coord{0, 1}, Right}
+		} else if other.c == c.c-1 {
+			return MoveInstruction{Coord{0, -1}, Left}
+		}
+	} else if other.c == c.c {
+		if other.r == c.r+1 {
+			return MoveInstruction{Coord{1, 0}, Down}
+		} else if other.r == c.r-1 {
+			return MoveInstruction{Coord{-1, 0}, Up}
+		}
+	}
+	panic("invalid move")
+}
+
 type Game struct {
 	Maze    *Maze
 	Pos     Coord
@@ -158,25 +180,16 @@ func (g *Game) GetTile() byte {
 
 func (g *Game) Move() {
 	tile := g.GetTile()
-	// fmt.Println("=====================================")
-	fmt.Printf("pos=%c (%d, %d) ", tile, g.Pos.r, g.Pos.c)
-	// fmt.Println()
-
 	for _, mi := range AllMoveInstructions {
-		// fmt.Printf("Considering moving %s\n", mi.Direction)
-
 		if mi.Direction == g.Heading.Opposite() {
-			// fmt.Printf("Going in reverse, skipping %s\n", mi.Direction)
 			continue
 		}
 
 		if tile != 'S' && !IsConnected(mi.Direction.Opposite(), tile) {
-			// fmt.Printf("Not connected, skipping %s\n", mi.Direction)
 			continue
 		}
 
 		if g.Maze.MoveIsValid(mi, g.Pos) {
-			fmt.Printf("Moving %s\n", mi.Direction)
 			g.Pos = g.Pos.Move(mi)
 			g.Heading = mi.Direction
 			g.Steps++
@@ -202,7 +215,85 @@ func part1() {
 	println(farthest)
 }
 
-func part2() {}
+func part2() {
+	lines := ReadLines("input.txt")
+
+	maze := NewMaze(lines)
+	game := NewGame(maze)
+
+	visited := make(map[Coord]struct{})
+	var firstPos Coord
+	var lastPos Coord
+	for {
+		game.Move()
+		if firstPos == (Coord{}) {
+			firstPos = game.Pos
+		}
+		visited[game.Pos] = struct{}{}
+		if game.GetTile() == 'S' {
+			break
+		}
+		lastPos = game.Pos
+	}
+
+	// substitute 'S' with the underlying pipe
+	// current game.Pos is 'S'
+	firstMoveDir := game.Pos.To(firstPos).Direction
+	lastMoveDir := lastPos.To(game.Pos).Direction
+	var tile byte
+	if firstMoveDir == Up && lastMoveDir == Up {
+		tile = '|'
+	} else if firstMoveDir == Down && lastMoveDir == Down {
+		tile = '|'
+	} else if firstMoveDir == Right && lastMoveDir == Right {
+		tile = '-'
+	} else if firstMoveDir == Left && lastMoveDir == Left {
+		tile = '-'
+	} else if firstMoveDir == Up && lastMoveDir == Right {
+		tile = 'J'
+	} else if firstMoveDir == Up && lastMoveDir == Left {
+		tile = 'L'
+	} else if firstMoveDir == Down && lastMoveDir == Right {
+		tile = '7'
+	} else if firstMoveDir == Down && lastMoveDir == Left {
+		tile = 'F'
+	} else if firstMoveDir == Right && lastMoveDir == Up {
+		tile = 'F'
+	} else if firstMoveDir == Right && lastMoveDir == Down {
+		tile = 'L'
+	} else if firstMoveDir == Left && lastMoveDir == Up {
+		tile = '7'
+	} else if firstMoveDir == Left && lastMoveDir == Down {
+		tile = 'J'
+	} else {
+		panic("invalid move")
+	}
+	maze.SetTile(game.Pos.r, game.Pos.c, tile)
+
+	// point in polygon
+	area := 0
+	for r := 0; r < maze.Nr; r++ {
+		for c := 0; c < maze.Nc; c++ {
+			if _, ok := visited[Coord{r, c}]; ok {
+				continue
+			}
+
+			crossings := 0
+			for x := c + 1; x < maze.Nc; x++ {
+				tile := maze.GetTile(r, x)
+				_, ok := visited[Coord{r, x}]
+				if ok && slices.Contains([]byte{'|', 'J', 'L'}, tile) {
+					crossings++
+				}
+			}
+			if crossings%2 == 1 {
+				area++
+			}
+		}
+	}
+	println(area)
+
+}
 
 func main() {
 	part1()

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -70,35 +72,24 @@ func (u *Universe) Galaxies() []Coord {
 	return coords
 }
 
-func (u *Universe) duplicateRow(r int) {
-	var data []string
-	for i := 0; i < u.Rows(); i++ {
-		data = append(data, u.Row(i))
-		if i == r {
-			data = append(data, u.Row(i))
-		}
-	}
-	u.data = data
-}
-
-func (u *Universe) duplicateCol(c int) {
-	for i := 0; i < u.Rows(); i++ {
-		u.data[i] = u.data[i][:c] + string(u.data[i][c]) + u.data[i][c:]
-	}
-}
-
-func (u *Universe) Expand() {
+func (u *Universe) EmptyRows() []int {
+	var rows []int
 	for r := u.Rows() - 1; r >= 0; r-- {
 		if !HasGalaxy(u.Row(r)) {
-			u.duplicateRow(r)
+			rows = append(rows, r)
 		}
 	}
+	return rows
+}
 
+func (u *Universe) EmptyCols() []int {
+	var cols []int
 	for c := u.Cols() - 1; c >= 0; c-- {
 		if !HasGalaxy(u.Col(c)) {
-			u.duplicateCol(c)
+			cols = append(cols, c)
 		}
 	}
+	return cols
 }
 
 var dr = []int{-1, 1, 0, 0}
@@ -117,29 +108,35 @@ func Neighbors(u *Universe, coord Coord) []Coord {
 	return neighbors
 }
 
-func BfsShortestPaths(u *Universe, start Coord) map[Coord]int {
+type Path struct {
+	coord   Coord
+	steps   int
+	empties int // number of empty rows/cols we have passed
+}
+
+func BfsShortestPaths(u *Universe, start Coord, emptyRows, emptyCols []int) map[Coord]Path {
 	visited := make(map[Coord]bool)
-	queue := []Coord{start}
-	steps := 0
-	paths := make(map[Coord]int)
+	queue := []Path{{start, 0, 0}}
+	result := make(map[Coord]Path)
 	for len(queue) > 0 {
-		steps++
-		var next []Coord
-		for _, coord := range queue {
-			if u.IsGalaxy(coord) {
-				paths[coord] = steps - 1
+		path := queue[0]
+		queue = queue[1:]
+		visited[path.coord] = true
+		for _, neighbor := range Neighbors(u, path.coord) {
+			if visited[neighbor] {
+				continue
 			}
-			for _, neighbor := range Neighbors(u, coord) {
-				if visited[neighbor] {
-					continue
-				}
-				visited[neighbor] = true
-				next = append(next, neighbor)
+			if u.IsGalaxy(neighbor) {
+				result[neighbor] = Path{neighbor, path.steps + 1, path.empties}
 			}
+			empties := path.empties
+			if slices.Contains(emptyRows, neighbor.r) || slices.Contains(emptyCols, neighbor.c) {
+				empties++
+			}
+			queue = append(queue, Path{neighbor, path.steps + 1, empties})
 		}
-		queue = next
 	}
-	return paths
+	return result
 
 }
 
@@ -153,29 +150,27 @@ func GeneratePairs(coords []Coord) [][]Coord {
 	return pairs
 }
 
-func part1() {
+func main() {
 	lines := ReadLines("input.txt")
 	u := NewUniverse(lines)
-	u.Expand()
+	emptyRows := u.EmptyRows()
+	emptyCols := u.EmptyCols()
 
 	galaxies := u.Galaxies()
-	paths := map[Coord]map[Coord]int{}
-	for _, g := range galaxies {
-		paths[g] = BfsShortestPaths(u, g)
+	paths := map[Coord]map[Coord]Path{}
+	for i, g := range galaxies {
+		paths[g] = BfsShortestPaths(u, g, emptyRows, emptyCols)
+		fmt.Printf("Completed %d/%d\n", i+1, len(galaxies))
 	}
 
 	pairs := GeneratePairs(galaxies)
-	steps := 0
+	part1 := 0
+	part2 := 0
 	for _, pair := range pairs {
-		steps += paths[pair[0]][pair[1]]
+		path := paths[pair[0]][pair[1]]
+		part1 += path.steps + path.empties*(2-1)
+		part2 += path.steps + path.empties*(1e6-1)
 	}
-	println(steps)
-}
-
-func part2() {
-}
-
-func main() {
-	part1()
-	part2()
+	println(part1)
+	println(part2)
 }

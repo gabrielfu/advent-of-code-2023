@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math/bits"
 	"os"
 	"strings"
 	"time"
@@ -47,34 +48,36 @@ func EncodeLines(lines []string) []int {
 	return encoded
 }
 
-// Find the mirror point P in a sequence of numbers
-// such the left and right sides of P are mirror images.
-// Returns 0 if no mirror point is found
-// E.g., FindMirror([]int{5, 6, 7, 8, 8, 7}) == 4
-func FindMirror(arr []int) int {
+func ReverseSlice(arr []int) []int {
+	arr = append([]int{}, arr...)
+	for i, j := 0, len(arr)-1; i < j; i, j = i+1, j-1 {
+		arr[i], arr[j] = arr[j], arr[i]
+	}
+	return arr
+}
+
+func NumSmudges(a, b int) int {
+	return bits.OnesCount(uint(a ^ b))
+}
+
+func FindMirror(arr []int, smudge bool) (int, bool) {
 	for k := 1; k < len(arr); k++ {
+		count := 0
 		left := arr[:k]
 		right := arr[k:]
-		// reverse left
-		left = append([]int{}, left...)
-		for i, j := 0, len(left)-1; i < j; i, j = i+1, j-1 {
-			left[i], left[j] = left[j], left[i]
-		}
-		// fmt.Printf("k=%d, left=%v, right=%v\n", k, left, right)
+		left = ReverseSlice(left)
 		end := min(len(left), len(right))
 		for i := 0; i < end; i++ {
-			if left[i] != right[i] {
-				break
-			}
-			if i == end-1 {
-				return k
+			count += NumSmudges(left[i], right[i])
+			if i == end-1 && ((smudge && count == 1) || (!smudge && count == 0)) {
+				return k, true
 			}
 		}
 	}
-	return 0
+	return 0, false
 }
 
-func part1() {
+func Solve(smudge bool) {
 	content := ReadFile("input.txt")
 	puzzles := strings.Split(strings.TrimSpace(content), "\n\n")
 
@@ -82,18 +85,27 @@ func part1() {
 	for _, puzzle := range puzzles {
 		lines := strings.Split(strings.TrimSpace(puzzle), "\n")
 		rows := EncodeLines(lines)
-		mr := FindMirror(rows)
+		mr, ok := FindMirror(rows, smudge)
+		if ok {
+			summary += mr * 100
+		}
 
 		transposed := TranposeLines(lines)
 		cols := EncodeLines(transposed)
-		mc := FindMirror(cols)
-
-		summary += mr*100 + mc
+		mc, ok := FindMirror(cols, smudge)
+		if ok {
+			summary += mc
+		}
 	}
 	println(summary)
 }
 
+func part1() {
+	Solve(false)
+}
+
 func part2() {
+	Solve(true)
 }
 
 func main() {

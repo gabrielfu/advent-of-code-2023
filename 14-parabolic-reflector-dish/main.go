@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 )
@@ -14,6 +15,10 @@ func ReadLines(filename string) []string {
 	}
 
 	return strings.Split(strings.TrimSpace(string(content)), "\n")
+}
+
+func FormatLines(lines []string) string {
+	return strings.Join(lines, "\n")
 }
 
 func RotateClockwise(lines []string) []string {
@@ -67,8 +72,10 @@ func RollLine(line string) string {
 	for i := N - 1; i >= 0; i-- {
 		if config[i] > 0 {
 			rolled[i] = 'O'
-			if i >= 1 {
+			// drop one rock. config[i-1] should never be -1 (#) if the input is correct
+			if i >= 1 && config[i] > 1 {
 				config[i-1] = config[i] - 1
+				config[i] = 1
 			}
 		} else if config[i] == -1 {
 			rolled[i] = '#'
@@ -87,6 +94,16 @@ func RollPlatform(lines []string) []string {
 	return rolled
 }
 
+func RollOneCycle(lines []string) []string {
+	var rotated []string
+	rotated = append(rotated, lines...)
+	for range [4]int{} {
+		rotated = RotateClockwise(rotated)
+		rotated = RollPlatform(rotated)
+	}
+	return rotated
+}
+
 func ScoreRow(line string) int {
 	score := 0
 	for i, char := range line {
@@ -99,6 +116,7 @@ func ScoreRow(line string) int {
 
 func ScorePlatform(lines []string) int {
 	score := 0
+	lines = RotateClockwise(lines)
 	for _, line := range lines {
 		score += ScoreRow(line)
 	}
@@ -107,13 +125,34 @@ func ScorePlatform(lines []string) int {
 
 func part1() {
 	lines := ReadLines("input.txt")
-	rotated := RotateClockwise(lines)
-	rolled := RollPlatform(rotated)
-	score := ScorePlatform(rolled)
+	lines = RotateClockwise(lines)
+	lines = RollPlatform(lines)
+	lines = RotateAnticlockwise(lines)
+	score := ScorePlatform(lines)
 	println(score)
 }
 
 func part2() {
+	lines := ReadLines("input.txt")
+
+	var cycles []string
+	var scores []int
+	n := 1000000000
+	loopStart := -1
+	i := 0
+	for ; i < n; i++ {
+		lines = RollOneCycle(lines)
+		formatted := FormatLines(lines)
+
+		loopStart = slices.Index(cycles, formatted)
+		if loopStart != -1 {
+			break
+		}
+		cycles = append(cycles, formatted)
+		scores = append(scores, ScorePlatform(lines))
+	}
+	index := (n-loopStart)%(i-loopStart+1) + loopStart
+	println(scores[index])
 }
 
 func main() {

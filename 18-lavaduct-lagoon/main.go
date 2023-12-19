@@ -26,15 +26,59 @@ const (
 	Right Direction = "R"
 )
 
-type Instruction struct {
+type PlanItem struct {
 	Direction Direction
 	Length    int
 	Color     string
 }
 
-type Plan []Instruction
+func (i PlanItem) Decode() PlanItem {
+	hex := i.Color[2:7]
+	length, err := strconv.ParseInt(hex, 16, 64)
+	if err != nil {
+		panic(err)
+	}
 
-func NewPlan(lines []string) Plan {
+	d := i.Color[7]
+	var direction Direction
+	switch d {
+	case '0':
+		direction = Right
+	case '1':
+		direction = Down
+	case '2':
+		direction = Left
+	case '3':
+		direction = Up
+	default:
+	}
+
+	return PlanItem{
+		Direction: direction,
+		Length:    int(length),
+		Color:     i.Color,
+	}
+}
+
+type Plan []PlanItem
+
+func (p Plan) String() string {
+	var s string
+	for _, inst := range p {
+		s += fmt.Sprintf("%s %d %s\n", inst.Direction, inst.Length, inst.Color)
+	}
+	return s
+}
+
+func (p Plan) TotalLength() int {
+	var t int
+	for _, inst := range p {
+		t += inst.Length
+	}
+	return t
+}
+
+func NewPlan(lines []string, decode bool) Plan {
 	var plan Plan
 	for _, line := range lines {
 		split := strings.Split(line, " ")
@@ -42,156 +86,72 @@ func NewPlan(lines []string) Plan {
 		if err != nil {
 			panic(err)
 		}
-		plan = append(plan, Instruction{
+		inst := PlanItem{
 			Direction: Direction(split[0]),
 			Length:    l,
 			Color:     split[2],
-		})
+		}
+		if decode {
+			inst = inst.Decode()
+		}
+		plan = append(plan, inst)
 	}
 	return plan
-}
-
-type Grid [][]rune
-
-func (g Grid) String() string {
-	var s string
-	for _, row := range g {
-		s += string(row) + "\n"
-	}
-	return s
-}
-
-func (g Grid) Area() int {
-	var area int
-	for _, row := range g {
-		for _, c := range row {
-			if c == '#' || c == 'O' {
-				area++
-			}
-		}
-	}
-	return area
 }
 
 type Coord struct {
 	r, c int
 }
 
-func BuildGrid(plan Plan) (Grid, Coord) {
-	// Find the bounds of the grid
-	var x, y, x0, x1, y0, y1 int
+func GetCoordList(plan Plan) []Coord {
+	coord := Coord{0, 0}
+	result := []Coord{coord}
 	for _, instruction := range plan {
 		switch instruction.Direction {
 		case Up:
-			y -= instruction.Length
+			coord = Coord{coord.r - instruction.Length, coord.c}
 		case Down:
-			y += instruction.Length
+			coord = Coord{coord.r + instruction.Length, coord.c}
 		case Left:
-			x -= instruction.Length
+			coord = Coord{coord.r, coord.c - instruction.Length}
 		case Right:
-			x += instruction.Length
+			coord = Coord{coord.r, coord.c + instruction.Length}
 		default:
 		}
-		x0 = min(x0, x)
-		x1 = max(x1, x)
-		y0 = min(y0, y)
-		y1 = max(y1, y)
+		result = append(result, coord)
 	}
-
-	// Build the grid
-	var grid Grid = make([][]rune, y1-y0+1)
-	for i := range grid {
-		grid[i] = make([]rune, x1-x0+1)
-		for j := range grid[i] {
-			grid[i][j] = '.'
-		}
-	}
-
-	// Label the grid
-	x, y = -x0, -y0
-	for _, instruction := range plan {
-		switch instruction.Direction {
-		case Up:
-			for i := 0; i < instruction.Length; i++ {
-				grid[y-i][x] = '#'
-			}
-			y -= instruction.Length
-		case Down:
-			for i := 0; i < instruction.Length; i++ {
-				grid[y+i][x] = '#'
-			}
-			y += instruction.Length
-		case Left:
-			for i := 0; i < instruction.Length; i++ {
-				grid[y][x-i] = '#'
-			}
-			x -= instruction.Length
-		case Right:
-			for i := 0; i < instruction.Length; i++ {
-				grid[y][x+i] = '#'
-			}
-			x += instruction.Length
-		default:
-		}
-	}
-	return grid, Coord{-x0, -y0}
+	return result
 }
 
-func FloodFill(grid Grid, coord Coord) Grid {
-	// copy grid
-	grid = append([][]rune(nil), grid...)
-	for i := range grid {
-		grid[i] = append([]rune(nil), grid[i]...)
+// Calculates the area using Shoelace formula
+func ShoelaceArea(coords []Coord) int {
+	var area int
+	for i := 0; i < len(coords)-1; i++ {
+		this := coords[i]
+		next := coords[i+1]
+		area += (this.r + next.r) * (this.c - next.c)
 	}
-
-	q := []Coord{coord}
-	for len(q) > 0 {
-		coord = q[0]
-		q = q[1:]
-		if coord.r < 0 || coord.r >= len(grid) || coord.c < 0 || coord.c >= len(grid[coord.r]) {
-			continue
-		}
-		tile := grid[coord.r][coord.c]
-		if tile != '#' && (coord.r == 0 || coord.r == len(grid)-1) && (coord.c == 0 || coord.c == len(grid[coord.r])-1) {
-			return nil
-		}
-		if tile != '#' {
-			grid[coord.r][coord.c] = '#'
-			q = append(q, Coord{coord.r - 1, coord.c})
-			q = append(q, Coord{coord.r + 1, coord.c})
-			q = append(q, Coord{coord.r, coord.c - 1})
-			q = append(q, Coord{coord.r, coord.c + 1})
-		}
-	}
-	return grid
-}
-
-func FloodFillEnclosed(grid Grid, origin Coord) Grid {
-	if new := FloodFill(grid, Coord{origin.r + 1, origin.c + 1}); new != nil {
-		return new
-	}
-	if new := FloodFill(grid, Coord{origin.r + 1, origin.c - 1}); new != nil {
-		return new
-	}
-	if new := FloodFill(grid, Coord{origin.r - 1, origin.c + 1}); new != nil {
-		return new
-	}
-	if new := FloodFill(grid, Coord{origin.r - 1, origin.c - 1}); new != nil {
-		return new
-	}
-	return nil
+	return area / 2
 }
 
 func part1() {
 	lines := ReadLines("input.txt")
-	plan := NewPlan(lines)
-	grid, origin := BuildGrid(plan)
-	grid = FloodFillEnclosed(grid, origin)
-	area := grid.Area()
-	fmt.Println(area)
+	plan := NewPlan(lines, false)
+	coords := GetCoordList(plan)
+	area := ShoelaceArea(coords)
+	length := plan.TotalLength()
+	totalArea := area + length/2 + 1
+	fmt.Println(totalArea)
 }
 
 func part2() {
+	lines := ReadLines("input.txt")
+	plan := NewPlan(lines, true)
+	coords := GetCoordList(plan)
+	area := ShoelaceArea(coords)
+	length := plan.TotalLength()
+	totalArea := area + length/2 + 1
+	fmt.Println(totalArea)
 }
 
 func main() {

@@ -56,10 +56,34 @@ func ParsePart(line string) Part {
 	return Part{x, m, a, s}
 }
 
+type Cmp string
+
+const (
+	GT  Cmp = ">"
+	LT  Cmp = "<"
+	GTE Cmp = ">="
+	LTE Cmp = "<="
+)
+
+func (c Cmp) Opposite() Cmp {
+	switch c {
+	case GT:
+		return LTE
+	case LT:
+		return GTE
+	case GTE:
+		return LT
+	case LTE:
+		return GT
+	default:
+		panic("invalid Cmp")
+	}
+}
+
 type Condition struct {
 	empty bool
 	cat   string
-	cmp   string
+	cmp   Cmp
 	val   int
 }
 
@@ -68,6 +92,27 @@ func (c Condition) String() string {
 		return "Condition(empty)"
 	}
 	return fmt.Sprintf("Condition(%s%s%d)", c.cat, c.cmp, c.val)
+}
+
+func (c Condition) Copy() Condition {
+	return Condition{
+		empty: c.empty,
+		cat:   c.cat,
+		cmp:   c.cmp,
+		val:   c.val,
+	}
+}
+
+func (c Condition) Opposite() Condition {
+	if c.empty {
+		return c
+	}
+	return Condition{
+		empty: false,
+		cat:   c.cat,
+		cmp:   c.cmp.Opposite(),
+		val:   c.val,
+	}
 }
 
 func (c Condition) Apply(p Part) bool {
@@ -87,9 +132,9 @@ func (c Condition) Apply(p Part) bool {
 	default:
 	}
 	switch c.cmp {
-	case ">":
+	case GT:
 		return value > c.val
-	case "<":
+	case LT:
 		return value < c.val
 	default:
 	}
@@ -108,6 +153,10 @@ func (r Rule) String() string {
 type Workflow struct {
 	name  string
 	rules []Rule
+}
+
+func (w Workflow) Len() int {
+	return len(w.rules)
 }
 
 func (w Workflow) String() string {
@@ -134,7 +183,7 @@ func ParseWorkflow(line string) Workflow {
 		}
 		cond := Condition{
 			cat:   matches[1],
-			cmp:   matches[2],
+			cmp:   Cmp(matches[2]),
 			val:   val,
 			empty: false,
 		}
@@ -164,8 +213,7 @@ func RunWorkflows(ws map[string]Workflow, p Part, start string) string {
 	}
 }
 
-func part1() {
-	lines := ReadLines("input.txt")
+func ParseLines(lines []string) (map[string]Workflow, []Part) {
 	workflows := make(map[string]Workflow)
 
 	var i int
@@ -186,6 +234,12 @@ func part1() {
 		}
 		parts = append(parts, ParsePart(line))
 	}
+	return workflows, parts
+}
+
+func part1() {
+	lines := ReadLines("input.txt")
+	workflows, parts := ParseLines(lines)
 
 	total := 0
 	for _, p := range parts {
@@ -195,10 +249,114 @@ func part1() {
 		}
 	}
 	println(total)
+}
 
+type Conditions []Condition
+
+func (c Conditions) Copy() Conditions {
+	var copy Conditions
+	for _, cond := range c {
+		copy = append(copy, cond.Copy())
+	}
+	return copy
+}
+
+type Range struct {
+	min, max int // inclusive
+}
+
+func NewRange() *Range {
+	return &Range{1, 4000}
+}
+
+func (r Range) String() string {
+	return fmt.Sprintf("Range(%d, %d)", r.min, r.max)
+}
+
+func (c Conditions) Consolidate() map[string]*Range {
+	ranges := make(map[string]*Range)
+	ranges["x"] = NewRange()
+	ranges["m"] = NewRange()
+	ranges["a"] = NewRange()
+	ranges["s"] = NewRange()
+	for _, cond := range c {
+		if cond.empty {
+			continue
+		}
+		r := ranges[cond.cat]
+		switch cond.cmp {
+		case GT:
+			r.min = max(r.min, cond.val+1)
+		case LT:
+			r.max = min(r.max, cond.val-1)
+		case GTE:
+			r.min = max(r.min, cond.val)
+		case LTE:
+			r.max = min(r.max, cond.val)
+		default:
+			panic("invalid Cmp")
+		}
+	}
+	return ranges
+}
+
+type Accepted struct {
+	data []Conditions
+}
+
+func (a *Accepted) Add(c Conditions) {
+	a.data = append(a.data, c)
+}
+
+func traverse(workflows map[string]Workflow, wname string, r int, conditions Conditions, accepted *Accepted) {
+	w := workflows[wname]
+	rule := w.rules[r]
+	if rule.cond.empty {
+		if rule.dest == "A" {
+			// fmt.Println("Accepted!", conditions)
+			accepted.Add(conditions)
+		} else if rule.dest == "R" {
+			return
+		} else {
+			traverse(workflows, rule.dest, 0, conditions, accepted)
+		}
+	} else {
+		if rule.dest == "A" {
+			// fmt.Println("Accepted!", append(conditions.Copy(), rule.cond))
+			accepted.Add(append(conditions.Copy(), rule.cond))
+		} else if rule.dest != "R" {
+			traverse(workflows, rule.dest, 0, append(conditions.Copy(), rule.cond), accepted)
+		}
+
+		if r+1 < w.Len() {
+			traverse(workflows, wname, r+1, append(conditions.Copy(), rule.cond.Opposite()), accepted)
+		}
+	}
+}
+
+func Solve2(workflows map[string]Workflow, start string, conditions Conditions) int {
+	accepted := &Accepted{}
+	traverse(workflows, start, 0, conditions, accepted)
+	total := 0
+	for _, c := range accepted.data {
+		ranges := c.Consolidate()
+		if len(ranges) == 0 {
+			continue
+		}
+		comb := 1
+		for _, r := range ranges {
+			comb *= (r.max - r.min + 1)
+		}
+		total += comb
+	}
+	return total
 }
 
 func part2() {
+	lines := ReadLines("input.txt")
+	workflows, _ := ParseLines(lines)
+	total := Solve2(workflows, "in", Conditions{})
+	println(total)
 }
 
 func main() {

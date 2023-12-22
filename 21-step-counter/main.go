@@ -48,12 +48,6 @@ func (g *Grid) Get(coord Coord) byte {
 	return g.data[coord.r][coord.c]
 }
 
-func (g *Grid) Set(coord Coord, ch byte) {
-	row := []byte(g.data[coord.r])
-	row[coord.c] = ch
-	g.data[coord.r] = string(row)
-}
-
 func (g *Grid) StartPos() Coord {
 	for r, row := range g.data {
 		for c, ch := range row {
@@ -69,15 +63,6 @@ type Coord struct {
 	r int
 	c int
 }
-
-type VisitStatus int
-
-const (
-	Unvisited VisitStatus = iota
-	Odd
-	Even
-	Unreachable
-)
 
 type Entry struct {
 	coord Coord
@@ -115,18 +100,6 @@ func traverse(g *Grid, start Coord, steps int) map[int]int {
 		}
 	}
 	return res
-}
-
-func Count(visited [][]VisitStatus, status VisitStatus) int {
-	total := 0
-	for _, row := range visited {
-		for _, v := range row {
-			if v == status {
-				total++
-			}
-		}
-	}
-	return total
 }
 
 func Solve(grid *Grid, n int) int {

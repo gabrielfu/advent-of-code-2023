@@ -83,6 +83,10 @@ func traverse(g *Grid, start Coord, steps int) [][]VisitStatus {
 	for len(queue) > 0 {
 		entry, queue = queue[0], queue[1:]
 
+		if visited[entry.coord.r][entry.coord.c] != Unvisited {
+			continue
+		}
+
 		if g.Get(entry.coord) == '#' {
 			visited[entry.coord.r][entry.coord.c] = Unreachable
 			continue
@@ -134,29 +138,7 @@ func Count(visited [][]VisitStatus, status VisitStatus) int {
 func part1() {
 	lines := ReadLines("input.txt")
 	grid := NewGrid(lines)
-	fmt.Println(grid)
-	fmt.Println("=========================")
 	visited := traverse(grid, grid.StartPos(), 64)
-
-	fmt.Println(grid)
-	fmt.Println("=========================")
-
-	for _, row := range visited {
-		for _, v := range row {
-			switch v {
-			case Unvisited:
-				fmt.Print(".")
-			case Odd:
-				fmt.Print("O")
-			case Even:
-				fmt.Print("E")
-			case Unreachable:
-				fmt.Print("#")
-			}
-		}
-		fmt.Println()
-	}
-
 	total := Count(visited, Even)
 	fmt.Println(total)
 }

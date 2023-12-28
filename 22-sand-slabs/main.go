@@ -37,14 +37,6 @@ func (b *Brick) String() string {
 	)
 }
 
-func (b *Brick) Copy() *Brick {
-	return &Brick{
-		Coord{b.Start.x, b.Start.y, b.Start.z},
-		Coord{b.End.x, b.End.y, b.End.z},
-		b.Id,
-	}
-}
-
 func (b *Brick) MoveDown() *Brick {
 	return &Brick{
 		Coord{b.Start.x, b.Start.y, b.Start.z - 1},
@@ -179,6 +171,47 @@ func FindDisintegrable(bricks []*Brick) []Id {
 	return disintegrable
 }
 
+func containsAll[T comparable](set map[T]struct{}, subset []T) bool {
+	for _, v := range subset {
+		if _, ok := set[v]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func addAll[T comparable](set map[T]struct{}, elems []T) {
+	for _, v := range elems {
+		set[v] = struct{}{}
+	}
+}
+
+func removeBrick(supported, supporting map[Id][]Id, id Id, removed map[Id]struct{}) {
+	if supporting[id] == nil || len(supporting[id]) == 0 {
+		return
+	}
+
+	removed[id] = struct{}{}
+	var nexts []Id
+	for _, supp := range supporting[id] {
+		if containsAll(removed, supported[supp]) {
+			nexts = append(nexts, supp)
+		}
+	}
+
+	addAll(removed, nexts)
+	for _, next := range nexts {
+		removeBrick(supported, supporting, next, removed)
+	}
+}
+
+func RemoveBrick(supported, supporting map[Id][]Id, id Id) int {
+	removed := make(map[Id]struct{})
+	removeBrick(supported, supporting, id, removed)
+	delete(removed, id)
+	return len(removed)
+}
+
 func part1() {
 	lines := ReadLines("input.txt")
 	bricks := ParseBricks(lines)
@@ -188,6 +221,17 @@ func part1() {
 }
 
 func part2() {
+	lines := ReadLines("input.txt")
+	bricks := ParseBricks(lines)
+	StartFalling(bricks)
+
+	supported := BuildSupportedGraph(bricks)
+	supporting := BuildSupportingGraph(bricks)
+	total := 0
+	for _, brick := range bricks {
+		total += RemoveBrick(supported, supporting, brick.Id)
+	}
+	fmt.Println(total)
 }
 
 func main() {

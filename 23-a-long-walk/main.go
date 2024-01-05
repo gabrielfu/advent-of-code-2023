@@ -93,6 +93,58 @@ func solvePart1(grid Grid, start Coord) int {
 	return search(Node{start, start, 0})
 }
 
+func solvePart2(grid Grid, start Coord) int {
+	h, w := len(grid), len(grid[0])
+
+	visited := make(map[Coord]bool)
+
+	var search func(Node) (int, bool)
+	search = func(cur Node) (int, bool) {
+		if cur.r == h-1 {
+			return cur.steps, true
+		}
+
+		neighbors := []Coord{
+			{cur.r - 1, cur.c},
+			{cur.r + 1, cur.c},
+			{cur.r, cur.c - 1},
+			{cur.r, cur.c + 1},
+		}
+
+		best := 0
+		ended := false
+		for _, nb := range neighbors {
+			if nb.r < 0 || nb.r >= h || nb.c < 0 || nb.c >= w {
+				continue
+			}
+
+			if visited[nb] {
+				continue
+			}
+
+			if nb == cur.last {
+				continue
+			}
+
+			if grid[nb.r][nb.c] == '#' {
+				continue
+			}
+
+			visited[nb] = true
+			next, end := search(Node{nb, cur.Coord, cur.steps + 1})
+			if end {
+				best = max(best, next)
+				ended = true
+			}
+			visited[nb] = false
+		}
+		return best, ended
+	}
+
+	steps, _ := search(Node{start, start, 0})
+	return steps
+}
+
 func part1() {
 	grid := Grid(ReadLines("input.txt"))
 	start := findStartingPos(grid)
@@ -101,6 +153,11 @@ func part1() {
 }
 
 func part2() {
+	// takes 27 minutes to run, probably have a better solution
+	grid := Grid(ReadLines("input.txt"))
+	start := findStartingPos(grid)
+	steps := solvePart2(grid, start)
+	fmt.Println(steps)
 }
 
 func main() {

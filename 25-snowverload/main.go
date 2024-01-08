@@ -158,10 +158,8 @@ func TopK(m map[Pair]int, k int) []Pair {
 }
 
 func MinimumCut(g *Graph, iter int, k int) int {
-	done := false
-	var reachable []Node
-
-	for !done {
+	n := len(g.nodes)
+	for {
 		crossings := make(map[Pair]int)
 		for i := 0; i < iter; i++ {
 			from := g.RandomNode()
@@ -181,13 +179,13 @@ func MinimumCut(g *Graph, iter int, k int) int {
 		for _, pair := range topK {
 			ng.RemoveEdge(pair.a, pair.b)
 		}
-		reachable = ng.Reachable(g.nodes[0])
+		reachable := ng.Reachable(g.nodes[0])
+		r := len(reachable)
 
-		if len(reachable) != len(g.nodes) {
-			done = true
+		if r != n {
+			return r
 		}
 	}
-	return len(reachable)
 }
 
 func part1() {
@@ -203,7 +201,7 @@ func part1() {
 		}
 	}
 
-	r := MinimumCut(g, 20, 3)
+	r := MinimumCut(g, 500, 3)
 	nr := len(g.nodes) - r
 	fmt.Println(r * nr)
 }
